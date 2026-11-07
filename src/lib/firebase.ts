@@ -15,18 +15,32 @@ const app = initializeApp(firebaseConfig);
 
 // Initialize Firestore with offline persistence and target database ID
 function createFirestoreInstance() {
+  const customDbId =
+    firebaseConfig.firestoreDatabaseId &&
+    firebaseConfig.firestoreDatabaseId !== '(default)' &&
+    firebaseConfig.firestoreDatabaseId.trim() !== ''
+      ? firebaseConfig.firestoreDatabaseId
+      : undefined;
+
   try {
-    return initializeFirestore(
-      app,
-      {
-        localCache: persistentLocalCache({
-          tabManager: persistentMultipleTabManager(),
-        }),
-      },
-      firebaseConfig.firestoreDatabaseId
-    );
+    if (customDbId) {
+      return initializeFirestore(
+        app,
+        {
+          localCache: persistentLocalCache({
+            tabManager: persistentMultipleTabManager(),
+          }),
+        },
+        customDbId
+      );
+    }
+    return initializeFirestore(app, {
+      localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager(),
+      }),
+    });
   } catch {
-    return getFirestore(app, firebaseConfig.firestoreDatabaseId);
+    return customDbId ? getFirestore(app, customDbId) : getFirestore(app);
   }
 }
 
