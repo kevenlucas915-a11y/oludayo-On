@@ -1,0 +1,6 @@
+{
+  "name": "Oludayo On",
+  "description": "Aplicativo para aprendizado de cantigas tradicionais de Candomblé da nação Ketu no estilo Duolingo, com letras em iorubá, pronúncia, tradução, contexto ritual e ranking de estudo.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

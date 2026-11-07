@@ -1,0 +1,104 @@
+{
+  "entities": {
+    "Orixa": {
+      "title": "Orixa",
+      "description": "Entidade de Orixá sagrado da tradição Ketu",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nome": { "type": "string" },
+        "corPrimaria": { "type": "string" },
+        "corSecundaria": { "type": "string" },
+        "saudacao": { "type": "string" },
+        "descricaoCurta": { "type": "string" },
+        "elemento": { "type": "string" },
+        "toquePrincipal": { "type": "string" }
+      },
+      "required": ["id", "nome", "corPrimaria", "saudacao"]
+    },
+    "TipoCantiga": {
+      "title": "TipoCantiga",
+      "description": "Categoria litúrgica de cantigas (Reza, Xirê, Chamada, etc.)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nome": { "type": "string" },
+        "descricao": { "type": "string" }
+      },
+      "required": ["id", "nome"]
+    },
+    "Cantiga": {
+      "title": "Cantiga",
+      "description": "Cantiga litúrgica de Candomblé da nação Ketu",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "titulo": { "type": "string" },
+        "orixaId": { "type": "string" },
+        "tipoId": { "type": "string" },
+        "toqueAtabaque": { "type": "string" },
+        "audioUrl": { "type": "string" },
+        "versos": { "type": "array" },
+        "quandoCantada": { "type": "string" },
+        "observacoes": { "type": "string" },
+        "revisada": { "type": "boolean" },
+        "ehExemplo": { "type": "boolean" },
+        "criadoEm": { "type": "string" },
+        "atualizadoEm": { "type": "string" }
+      },
+      "required": ["id", "titulo", "orixaId", "tipoId", "toqueAtabaque", "versos", "revisada"]
+    },
+    "Usuario": {
+      "title": "Usuario",
+      "description": "Membro ou Administradora da casa de Candomblé",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nome": { "type": "string" },
+        "email": { "type": "string" },
+        "perfil": { "type": "string", "enum": ["membro", "administradora"] },
+        "aprovado": { "type": "boolean" },
+        "orixaGuia": { "type": "string" },
+        "criadoEm": { "type": "string" }
+      },
+      "required": ["id", "nome", "email", "perfil", "aprovado"]
+    },
+    "ProgressoUsuario": {
+      "title": "ProgressoUsuario",
+      "description": "Progresso e pontuação de estudo do membro da casa",
+      "type": "object",
+      "properties": {
+        "usuarioId": { "type": "string" },
+        "cantigasAprendidas": { "type": "array" },
+        "pontos": { "type": "number" },
+        "sequenciaDias": { "type": "number" },
+        "ultimaAtividadeData": { "type": "string" },
+        "licoesFeitas": { "type": "number" },
+        "medalhasDesbloqueadas": { "type": "array" }
+      },
+      "required": ["usuarioId", "cantigasAprendidas", "pontos", "sequenciaDias", "licoesFeitas"]
+    }
+  },
+  "firestore": {
+    "/cantigas/{cantigaId}": {
+      "schema": { "$ref": "#/entities/Cantiga" },
+      "description": "Acervo de cantigas litúrgicas cadastradas e revisadas"
+    },
+    "/orixas/{orixaId}": {
+      "schema": { "$ref": "#/entities/Orixa" },
+      "description": "Cadastro de orixás e suas cores sagradas"
+    },
+    "/tipos/{tipoId}": {
+      "schema": { "$ref": "#/entities/TipoCantiga" },
+      "description": "Momentos rituais e tipos de cantigas"
+    },
+    "/usuarios/{usuarioId}": {
+      "schema": { "$ref": "#/entities/Usuario" },
+      "description": "Cadastro e controle de acesso dos membros da casa"
+    },
+    "/progressos/{usuarioId}": {
+      "schema": { "$ref": "#/entities/ProgressoUsuario" },
+      "description": "Métricas de estudo, sequência e ranking dos membros"
+    }
+  }
+}
