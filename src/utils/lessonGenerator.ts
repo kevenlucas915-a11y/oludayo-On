@@ -211,9 +211,9 @@ export function checkMedalUnlocks(
     newMedals.push('med-ogum');
   }
 
-  // 3. Filho das Águas (Oxum e Iemanjá)
+  // 3. Filho das Águas (Oxum e Iemanjá/Nanã)
   const hasOxum = allCantigas.some((c) => c.orixaId === 'oxum' && learnedIds.has(c.id));
-  const hasIemanjaOrNana = allCantigas.some((c) => (c.orixaId === 'iemanja' || c.orixaId === 'oxum') && learnedIds.has(c.id));
+  const hasIemanjaOrNana = allCantigas.some((c) => (c.orixaId === 'iemanja' || c.orixaId === 'nana') && learnedIds.has(c.id));
   if (hasOxum && hasIemanjaOrNana && !progresso.medalhasDesbloqueadas.includes('med-aguas')) {
     newMedals.push('med-aguas');
   }

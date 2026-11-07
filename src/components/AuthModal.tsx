@@ -9,8 +9,6 @@ export const AuthModal: React.FC = () => {
     login,
     solicitarCadastro,
     switchUser,
-    users,
-    showToast,
   } = useApp();
 
   const [mode, setMode] = useState<'login' | 'cadastro'>('login');
@@ -20,15 +18,21 @@ export const AuthModal: React.FC = () => {
   const [orixaGuia, setOrixaGuia] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [successNotice, setSuccessNotice] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   if (!isAuthModalOpen) return null;
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
-    const res = login(email);
-    if (!res.success) {
-      setErrorMsg(res.message);
+    setIsLoading(true);
+    try {
+      const res = await login(email, password);
+      if (!res.success) {
+        setErrorMsg(res.message);
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -36,14 +40,24 @@ export const AuthModal: React.FC = () => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessNotice('');
-    const res = await solicitarCadastro(nome, email, orixaGuia);
-    if (!res.success) {
-      setErrorMsg(res.message);
-    } else {
-      setSuccessNotice(res.message);
-      setNome('');
-      setEmail('');
-      setOrixaGuia('');
+    if (password.length < 6) {
+      setErrorMsg('A senha deve ter pelo menos 6 caracteres.');
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const res = await solicitarCadastro(nome, email, password, orixaGuia);
+      if (!res.success) {
+        setErrorMsg(res.message);
+      } else {
+        setSuccessNotice(res.message);
+        setNome('');
+        setEmail('');
+        setPassword('');
+        setOrixaGuia('');
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -76,7 +90,7 @@ export const AuthModal: React.FC = () => {
           </p>
         </div>
 
-        {/* Iyá Tèbíèse Shortcut */}
+        {/* Iyá Tèbíèse Shortcut (Identificação rápida de sessão) */}
         <div className="bg-[#FAF8F5] p-3 rounded-2xl border border-[#E6D5AC] space-y-2">
           <span className="text-[10px] uppercase font-bold text-[#78350F] tracking-wider block">
             Acesso da Iyá Tèbíèse:
@@ -182,9 +196,10 @@ export const AuthModal: React.FC = () => {
 
             <button
               type="submit"
-              className="w-full py-3 bg-[#9A3412] hover:bg-[#7C2D12] text-white text-xs font-bold rounded-xl shadow-md transition-all active:scale-[0.99] mt-2"
+              disabled={isLoading}
+              className="w-full py-3 bg-[#9A3412] hover:bg-[#7C2D12] disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-md transition-all active:scale-[0.99] mt-2"
             >
-              Entrar no Oludayo On
+              {isLoading ? 'Conectando ao Firebase...' : 'Entrar no Oludayo On'}
             </button>
           </form>
         ) : (
@@ -219,11 +234,12 @@ export const AuthModal: React.FC = () => {
 
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1">
-                Definir Senha de Acesso *
+                Definir Senha de Acesso * (mínimo 6 caracteres)
               </label>
               <input
                 type="password"
                 required
+                minLength={6}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Crie uma senha de acesso"
@@ -250,9 +266,10 @@ export const AuthModal: React.FC = () => {
 
             <button
               type="submit"
-              className="w-full py-3 bg-[#9A3412] hover:bg-[#7C2D12] text-white text-xs font-bold rounded-xl shadow-md transition-all active:scale-[0.99] mt-2"
+              disabled={isLoading}
+              className="w-full py-3 bg-[#9A3412] hover:bg-[#7C2D12] disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-md transition-all active:scale-[0.99] mt-2"
             >
-              Enviar Solicitação de Entrada
+              {isLoading ? 'Registrando no Firebase...' : 'Enviar Solicitação de Entrada'}
             </button>
           </form>
         )}

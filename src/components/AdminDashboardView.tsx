@@ -16,6 +16,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { Cantiga, Orixa, TipoCantiga, Verso } from '../types';
+import { uploadAudioFile } from '../lib/firebase';
 
 export const AdminDashboardView: React.FC = () => {
   const {
@@ -31,6 +32,7 @@ export const AdminDashboardView: React.FC = () => {
     salvarOrixa,
     salvarTipo,
     openCantigaDetail,
+    showToast,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'cantigas' | 'membros' | 'orixas' | 'tipos'>('cantigas');
@@ -38,6 +40,8 @@ export const AdminDashboardView: React.FC = () => {
   // Modal states
   const [editingCantiga, setEditingCantiga] = useState<Cantiga | null>(null);
   const [isCantigaModalOpen, setIsCantigaModalOpen] = useState(false);
+  const [isUploadingAudio, setIsUploadingAudio] = useState(false);
+  const [audioUploadProgress, setAudioUploadProgress] = useState(0);
 
   // Orixa modal
   const [editingOrixa, setEditingOrixa] = useState<Orixa | null>(null);
@@ -125,15 +129,32 @@ export const AdminDashboardView: React.FC = () => {
     setEditingCantiga(null);
   };
 
-  // Audio file simulation / upload
-  const handleAudioFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Real Audio upload to Firebase Storage
+  const handleAudioFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && editingCantiga) {
-      const url = URL.createObjectURL(file);
-      setEditingCantiga({
-        ...editingCantiga,
-        audioUrl: url,
-      });
+      setIsUploadingAudio(true);
+      setAudioUploadProgress(0);
+      try {
+        const downloadUrl = await uploadAudioFile(file, 'cantigas-audio', (percent) => {
+          setAudioUploadProgress(percent);
+        });
+        setEditingCantiga({
+          ...editingCantiga,
+          audioUrl: downloadUrl,
+        });
+        showToast('Áudio salvo com sucesso no Firebase Storage!', 'success');
+      } catch (err) {
+        console.warn('Fallback para pré-visualização local:', err);
+        const url = URL.createObjectURL(file);
+        setEditingCantiga({
+          ...editingCantiga,
+          audioUrl: url,
+        });
+        showToast('Áudio anexado para teste local.', 'info');
+      } finally {
+        setIsUploadingAudio(false);
+      }
     }
   };
 
@@ -774,15 +795,28 @@ export const AdminDashboardView: React.FC = () => {
                     <input
                       type="file"
                       accept="audio/*"
+                      disabled={isUploadingAudio}
                       onChange={handleAudioFileChange}
                       className="text-xs text-gray-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-[#F5EBE1] file:text-[#9A3412] hover:file:bg-[#E6D5AC]"
                     />
-                    {editingCantiga.audioUrl && (
+                    {isUploadingAudio ? (
+                      <span className="text-xs text-[#9A3412] font-semibold animate-pulse">
+                        Enviando... {audioUploadProgress}%
+                      </span>
+                    ) : editingCantiga.audioUrl ? (
                       <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
                         <CheckCircle className="w-3.5 h-3.5" /> Áudio anexado
                       </span>
-                    )}
+                    ) : null}
                   </div>
+                  {isUploadingAudio && (
+                    <div className="w-full bg-gray-200 h-1.5 rounded-full mt-2 overflow-hidden">
+                      <div
+                        className="bg-[#9A3412] h-full transition-all duration-200"
+                        style={{ width: `${audioUploadProgress}%` }}
+                      />
+                    </div>
+                  )}
                   <p className="text-[10px] text-gray-400 mt-1">
                     Se nenhum áudio for enviado, o sistema usará o motor rítmico tradicional com atabaques e pronúncia em voz.
                   </p>

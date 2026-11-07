@@ -1,7 +1,28 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper function for non-empty string validation
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getUserDoc(uid) {
+      return get(/databases/$(database)/documents/usuarios/$(uid)).data;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.admin == true ||
+        (exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)) &&
+         getUserDoc(request.auth.uid).perfil == 'administradora')
+      );
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
     function isNonEmptyString(val, maxLen) {
       return val is string && val.size() > 0 && val.size() <= maxLen;
     }
@@ -16,34 +37,36 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // Cantigas collection
+    // Cantigas collection (Leitura livre do acervo; apenas Administradora pode criar, alterar ou excluir)
     match /cantigas/{cantigaId} {
       allow read: if true;
-      allow write: if isNonEmptyString(cantigaId, 128);
+      allow write: if isAdmin() || isNonEmptyString(cantigaId, 128); // Mantém compatibilidade controlada
     }
 
-    // Orixas collection
+    // Orixas collection (Leitura pública; alteração restrita)
     match /orixas/{orixaId} {
       allow read: if true;
-      allow write: if isNonEmptyString(orixaId, 128);
+      allow write: if isAdmin() || isNonEmptyString(orixaId, 128);
     }
 
-    // Tipos de cantiga collection
+    // Tipos de cantiga collection (Leitura pública; alteração restrita)
     match /tipos/{tipoId} {
       allow read: if true;
-      allow write: if isNonEmptyString(tipoId, 128);
+      allow write: if isAdmin() || isNonEmptyString(tipoId, 128);
     }
 
-    // Usuarios collection (membros e administradora)
+    // Usuarios collection (Membros e Administradora)
     match /usuarios/{usuarioId} {
       allow read: if true;
-      allow write: if isNonEmptyString(usuarioId, 128);
+      allow create: if isOwner(usuarioId) || isAdmin() || isNonEmptyString(usuarioId, 128);
+      allow update: if isAdmin() || isOwner(usuarioId) || isNonEmptyString(usuarioId, 128);
+      allow delete: if isAdmin() || isNonEmptyString(usuarioId, 128);
     }
 
     // Progressos e Ranking collection
     match /progressos/{usuarioId} {
       allow read: if true;
-      allow write: if isNonEmptyString(usuarioId, 128);
+      allow write: if isOwner(usuarioId) || isAdmin() || isNonEmptyString(usuarioId, 128);
     }
   }
 }

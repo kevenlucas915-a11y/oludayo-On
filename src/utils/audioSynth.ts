@@ -17,6 +17,7 @@ class KetuAudioEngine {
   private onStateChangeCallback?: (playing: boolean) => void;
   private activeVerses: Verso[] = [];
   private activeToque: string = 'Ijexá';
+  private currentUtterance: SpeechSynthesisUtterance | null = null;
 
   private getAudioContext(): AudioContext {
     if (!this.ctx) {
@@ -145,8 +146,10 @@ class KetuAudioEngine {
     utterance.lang = 'pt-BR';
     utterance.rate = 0.9 * this.playbackRate;
     utterance.pitch = 1.0;
+    this.currentUtterance = utterance;
 
     utterance.onend = () => {
+      this.currentUtterance = null;
       if (!this.isPlaying) return;
 
       const verseDurationMs = Math.max(2200, (textToSpeak.length * 110) / this.playbackRate);
@@ -172,6 +175,10 @@ class KetuAudioEngine {
           }
         }
       }, verseDurationMs * 0.3);
+    };
+
+    utterance.onerror = () => {
+      this.currentUtterance = null;
     };
 
     window.speechSynthesis.speak(utterance);
@@ -270,6 +277,7 @@ class KetuAudioEngine {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
+    this.currentUtterance = null;
     if (this.audioEl) {
       this.audioEl.pause();
     }

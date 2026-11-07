@@ -8,7 +8,13 @@ import {
   onSnapshot,
   writeBatch,
 } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType, testFirestoreConnection } from '../lib/firebase';
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  onAuthStateChanged,
+} from 'firebase/auth';
+import { db, auth, handleFirestoreError, OperationType, testFirestoreConnection } from '../lib/firebase';
 import {
   Cantiga,
   Medalha,
@@ -56,9 +62,9 @@ interface AppContextType {
   setSelectedOrixaFilter: (id: string | null) => void;
   setSelectedTipoFilter: (id: string | null) => void;
   setIsAuthModalOpen: (open: boolean) => void;
-  login: (email: string) => { success: boolean; message: string };
-  logout: () => void;
-  solicitarCadastro: (nome: string, email: string, orixaGuia?: string) => Promise<{ success: boolean; message: string }>;
+  login: (email: string, password?: string) => Promise<{ success: boolean; message: string }>;
+  logout: () => Promise<void>;
+  solicitarCadastro: (nome: string, email: string, password?: string, orixaGuia?: string) => Promise<{ success: boolean; message: string }>;
   aprovarMembro: (userId: string) => Promise<void>;
   rejeitarMembro: (userId: string) => Promise<void>;
   switchUser: (userId: string) => void;
@@ -104,6 +110,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     initFirestore();
   }, []);
+
+  // Listen to Firebase Auth state
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (fbUser) => {
+      if (fbUser) {
+        const matched = users.find(
+          (u) => u.id === fbUser.uid || u.email.toLowerCase() === fbUser.email?.toLowerCase()
+        );
+        if (matched) {
+          setCurrentUserId(matched.id);
+        }
+      }
+    });
+    return () => unsub();
+  }, [users]);
 
   // Real-time Firestore sync for Orixás
   useEffect(() => {
@@ -180,45 +201,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => unsub();
   }, []);
 
-  // Real-time Firestore sync for Usuários (with automatic cleanup of obsolete mock accounts)
+  // Real-time Firestore sync for Usuários
   useEffect(() => {
     const unsub = onSnapshot(
       collection(db, 'usuarios'),
       (snap) => {
-        const OBSOLETE_FICTITIOUS_IDS = ['user-admin-1', 'user-membro-1', 'user-membro-2', 'user-membro-3', 'user-pendente-1'];
-        const batch = writeBatch(db);
-        let hasDeletions = false;
-        const list: Usuario[] = [];
-
-        snap.forEach((docSnap) => {
-          const id = docSnap.id;
-          if (OBSOLETE_FICTITIOUS_IDS.includes(id)) {
-            batch.delete(doc(db, 'usuarios', id));
-            batch.delete(doc(db, 'progressos', id));
-            hasDeletions = true;
-          } else {
+        if (!snap.empty) {
+          const list: Usuario[] = [];
+          snap.forEach((docSnap) => {
             list.push(docSnap.data() as Usuario);
-          }
-        });
-
-        // Ensure Jenifer de Ogun is present as sole initial admin
-        const hasJenifer = list.some(
-          (u) => u.id === 'user-admin-jenifer' || u.email.toLowerCase() === 'kevenlucas915@gmail.com'
-        );
-
-        if (!hasJenifer) {
+          });
+          setUsers(list);
+        } else {
+          // Initialize Jenifer as sole initial admin if collection is empty
           const jenifer = SEED_USUARIOS[0];
-          batch.set(doc(db, 'usuarios', jenifer.id), jenifer);
-          batch.set(doc(db, 'progressos', jenifer.id), SEED_PROGRESSOS[jenifer.id]);
-          hasDeletions = true;
-          list.unshift(jenifer);
+          setDoc(doc(db, 'usuarios', jenifer.id), jenifer).catch(() => {});
+          setDoc(doc(db, 'progressos', jenifer.id), SEED_PROGRESSOS[jenifer.id]).catch(() => {});
+          setUsers([jenifer]);
         }
-
-        if (hasDeletions) {
-          batch.commit().catch(() => {});
-        }
-
-        setUsers(list);
       },
       (error) => {
         handleFirestoreError(error, OperationType.LIST, 'usuarios');
@@ -232,28 +232,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const unsub = onSnapshot(
       collection(db, 'progressos'),
       (snap) => {
-        const OBSOLETE_FICTITIOUS_IDS = ['user-admin-1', 'user-membro-1', 'user-membro-2', 'user-membro-3', 'user-pendente-1'];
         const dict: Record<string, ProgressoUsuario> = {};
         snap.forEach((docSnap) => {
-          if (!OBSOLETE_FICTITIOUS_IDS.includes(docSnap.id)) {
-            const data = docSnap.data() as ProgressoUsuario;
-            // Clean up any old fictitious 1250 points / 30 days seed for Jenifer
-            if (data.usuarioId === 'user-admin-jenifer' && (data.pontos > 0 || data.sequenciaDias > 0 || (data.cantigasAprendidas && data.cantigasAprendidas.length > 0))) {
-              const cleaned: ProgressoUsuario = {
-                usuarioId: 'user-admin-jenifer',
-                cantigasAprendidas: [],
-                pontos: 0,
-                sequenciaDias: 0,
-                ultimaAtividadeData: new Date().toISOString(),
-                licoesFeitas: 0,
-                medalhasDesbloqueadas: [],
-              };
-              setDoc(doc(db, 'progressos', 'user-admin-jenifer'), cleaned).catch(() => {});
-              dict['user-admin-jenifer'] = cleaned;
-            } else {
-              dict[data.usuarioId] = data;
-            }
-          }
+          const data = docSnap.data() as ProgressoUsuario;
+          dict[data.usuarioId] = data;
         });
 
         if (!dict['user-admin-jenifer'] && SEED_PROGRESSOS['user-admin-jenifer']) {
@@ -298,8 +280,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const login = (email: string) => {
-    const found = users.find((u) => u.email.trim().toLowerCase() === email.trim().toLowerCase());
+  const login = async (email: string, password?: string) => {
+    const cleanEmail = email.trim().toLowerCase();
+    const found = users.find((u) => u.email.trim().toLowerCase() === cleanEmail);
     if (!found) {
       return { success: false, message: 'E-mail não encontrado na casa. Solicite autorização à Iyá Tèbíèse (Jenifer de Ogun).' };
     }
@@ -309,27 +292,60 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         message: 'Acesso restrito: seu cadastro ainda aguarda aprovação da Iyá Tèbíèse.',
       };
     }
+
+    if (password && password.trim().length > 0) {
+      try {
+        await signInWithEmailAndPassword(auth, cleanEmail, password);
+      } catch (authErr: unknown) {
+        const err = authErr as { code?: string };
+        if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
+          try {
+            await createUserWithEmailAndPassword(auth, cleanEmail, password);
+          } catch {
+            // Proceed with user document matching
+          }
+        }
+      }
+    }
+
     setCurrentUserId(found.id);
     setIsAuthModalOpen(false);
     showToast(`Mojubá, ${found.nome}! Bem-vindo(a) de volta.`, 'success');
     return { success: true, message: 'Login realizado com sucesso.' };
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await firebaseSignOut(auth);
+    } catch {}
     setCurrentUserId('');
     showToast('Sessão encerrada com respeito.', 'info');
   };
 
-  const solicitarCadastro = async (nome: string, email: string, orixaGuia?: string) => {
-    const exists = users.find((u) => u.email.trim().toLowerCase() === email.trim().toLowerCase());
+  const solicitarCadastro = async (nome: string, email: string, password?: string, orixaGuia?: string) => {
+    const cleanEmail = email.trim().toLowerCase();
+    const exists = users.find((u) => u.email.trim().toLowerCase() === cleanEmail);
     if (exists) {
       return { success: false, message: 'Este e-mail já está cadastrado na casa.' };
     }
 
+    let uid = `user-${Date.now()}`;
+    if (password && password.length >= 6) {
+      try {
+        const cred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+        uid = cred.user.uid;
+      } catch (authErr: unknown) {
+        const err = authErr as { code?: string };
+        if (err.code !== 'auth/email-already-in-use') {
+          console.warn('Firebase Auth sign up notice:', authErr);
+        }
+      }
+    }
+
     const newUser: Usuario = {
-      id: `user-${Date.now()}`,
+      id: uid,
       nome: nome.trim(),
-      email: email.trim().toLowerCase(),
+      email: cleanEmail,
       perfil: 'membro',
       aprovado: false, // Requer aprovação da Iyá Tèbíèse
       orixaGuia: orixaGuia || '',
@@ -356,15 +372,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       await updateDoc(doc(db, 'usuarios', userId), { aprovado: true });
       // Initialize progression document if not present
       const progDoc = doc(db, 'progressos', userId);
-      await setDoc(progDoc, {
-        usuarioId: userId,
-        cantigasAprendidas: [],
-        pontos: 0,
-        sequenciaDias: 0,
-        ultimaAtividadeData: new Date().toISOString(),
-        licoesFeitas: 0,
-        medalhasDesbloqueadas: [],
-      });
+      await setDoc(
+        progDoc,
+        {
+          usuarioId: userId,
+          cantigasAprendidas: [],
+          pontos: 0,
+          sequenciaDias: 0,
+          ultimaAtividadeData: new Date().toISOString(),
+          licoesFeitas: 0,
+          medalhasDesbloqueadas: [],
+        },
+        { merge: true }
+      );
       showToast('Membro aprovado com sucesso! Acesso liberado no Firebase.', 'success');
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `usuarios/${userId}`);
@@ -374,6 +394,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const rejeitarMembro = async (userId: string) => {
     try {
       await deleteDoc(doc(db, 'usuarios', userId));
+      await deleteDoc(doc(db, 'progressos', userId)).catch(() => {});
       showToast('Solicitação removida do Firebase.', 'info');
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `usuarios/${userId}`);
@@ -468,6 +489,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const updatedProg: ProgressoUsuario = {
       ...prevProg,
+      usuarioId: currentUser.id,
       cantigasAprendidas: newLearned,
       pontos: prevProg.pontos + xpGanho,
       sequenciaDias: newStreak,
@@ -483,7 +505,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     try {
-      await setDoc(doc(db, 'progressos', currentUser.id), updatedProg);
+      await setDoc(doc(db, 'progressos', currentUser.id), updatedProg, { merge: true });
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, `progressos/${currentUser.id}`);
     }

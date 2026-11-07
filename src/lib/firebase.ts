@@ -1,13 +1,38 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import {
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  getFirestore,
+  doc,
+  getDocFromServer,
+} from 'firebase/firestore';
+import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 
-// CRITICAL: Initialize Firestore with firestoreDatabaseId as required
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+// Initialize Firestore with offline persistence and target database ID
+function createFirestoreInstance() {
+  try {
+    return initializeFirestore(
+      app,
+      {
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager(),
+        }),
+      },
+      firebaseConfig.firestoreDatabaseId
+    );
+  } catch {
+    return getFirestore(app, firebaseConfig.firestoreDatabaseId);
+  }
+}
+
+export const db = createFirestoreInstance();
 export const auth = getAuth(app);
+export const storage = getStorage(app);
 
 export enum OperationType {
   CREATE = 'create',
@@ -68,4 +93,43 @@ export async function testFirestoreConnection(): Promise<boolean> {
     }
     return false;
   }
+}
+
+// Audio file upload to Firebase Storage with progress callback
+export async function uploadAudioFile(
+  file: File,
+  folder: string = 'cantigas-audio',
+  onProgress?: (percent: number) => void
+): Promise<string> {
+  const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const uniquePath = `${folder}/${Date.now()}_${sanitizedName}`;
+  const storageRef = ref(storage, uniquePath);
+
+  return new Promise((resolve, reject) => {
+    const uploadTask = uploadBytesResumable(storageRef, file, {
+      contentType: file.type || 'audio/mpeg',
+    });
+
+    uploadTask.on(
+      'state_changed',
+      (snapshot) => {
+        if (onProgress && snapshot.totalBytes > 0) {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          onProgress(Math.round(progress));
+        }
+      },
+      (error) => {
+        console.error('Erro no upload para o Firebase Storage:', error);
+        reject(error);
+      },
+      async () => {
+        try {
+          const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+          resolve(downloadUrl);
+        } catch (urlErr) {
+          reject(urlErr);
+        }
+      }
+    );
+  });
 }
