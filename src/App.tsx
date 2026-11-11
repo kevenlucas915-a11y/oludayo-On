@@ -60,10 +60,63 @@ const AppContent: React.FC = () => {
   );
 };
 
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('Erro capturado pelo ErrorBoundary:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-[#FAF8F5] text-[#2C1810] flex items-center justify-center p-6 text-center">
+          <div className="max-w-md bg-white p-8 rounded-3xl border border-[#E6D5AC] shadow-xl space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-amber-100 text-[#7C2D12] flex items-center justify-center mx-auto text-2xl font-bold font-display">
+              Ọ
+            </div>
+            <h1 className="text-xl font-bold font-display text-[#2C1810]">
+              Oludayo On · Cantigas de Ketu
+            </h1>
+            <p className="text-sm text-gray-600">
+              Ocorreu uma instabilidade temporária ao carregar as informações.
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="w-full py-3 px-4 bg-gradient-to-r from-[#7C2D12] to-[#9A3412] text-white font-semibold rounded-xl hover:opacity-95 transition-opacity cursor-pointer"
+            >
+              Recarregar página
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   return (
-    <AppProvider>
-      <AppContent />
-    </AppProvider>
+    <ErrorBoundary>
+      <AppProvider>
+        <AppContent />
+      </AppProvider>
+    </ErrorBoundary>
   );
 }
