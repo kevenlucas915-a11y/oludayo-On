@@ -24,6 +24,9 @@ export const AdminDashboardView: React.FC = () => {
     users,
     orixas,
     tipos,
+    currentUser,
+    setCurrentView,
+    setIsAuthModalOpen,
     salvarCantiga,
     excluirCantiga,
     toggleRevisaoCantiga,
@@ -51,15 +54,50 @@ export const AdminDashboardView: React.FC = () => {
   const [editingTipo, setEditingTipo] = useState<TipoCantiga | null>(null);
   const [isTipoModalOpen, setIsTipoModalOpen] = useState(false);
 
-  const pendingUsers = users.filter((u) => !u.aprovado);
+  // Guard: if current user is not administrator, display courteous access gate
+  if (currentUser && currentUser.perfil !== 'administradora') {
+    return (
+      <div className="max-w-md mx-auto my-12 bg-white rounded-3xl p-8 border border-[#E6D5AC] text-center space-y-4 shadow-lg">
+        <div className="w-12 h-12 rounded-2xl bg-[#FEF3C7] text-[#92400E] flex items-center justify-center mx-auto">
+          <Shield className="w-6 h-6 text-[#9A3412]" />
+        </div>
+        <h2 className="font-display font-bold text-xl text-[#2C1810]">
+          Painel da Casa · Acesso da Iyá Tèbíèse
+        </h2>
+        <p className="text-xs text-gray-600">
+          Você está conectado(a) como <strong>{currentUser.nome}</strong> (Membro). Apenas a responsável litúrgica (Jenifer de Ogun) possui permissão de gestão do acervo e aprovação de membros.
+        </p>
+        <div className="pt-2 flex flex-col gap-2">
+          <button
+            onClick={() => setIsAuthModalOpen(true)}
+            className="w-full py-2.5 px-4 bg-[#9A3412] hover:bg-[#7C2D12] text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+          >
+            Acessar como Administradora
+          </button>
+          <button
+            onClick={() => setCurrentView('inicio')}
+            className="w-full py-2.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+          >
+            Voltar ao Início
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const safeCantigas = Array.isArray(cantigas) ? cantigas.filter(Boolean) : [];
+  const safeOrixas = Array.isArray(orixas) ? orixas.filter(Boolean) : [];
+  const safeTipos = Array.isArray(tipos) ? tipos.filter(Boolean) : [];
+  const safeUsers = Array.isArray(users) ? users.filter(Boolean) : [];
+  const pendingUsers = safeUsers.filter((u) => !u.aprovado);
 
   // Handlers for Cantiga Form
   const handleOpenNewCantiga = () => {
     const newCantiga: Cantiga = {
       id: `cantiga-${Date.now()}`,
       titulo: '',
-      orixaId: orixas[0]?.id || 'ogum',
-      tipoId: tipos[0]?.id || 'xire',
+      orixaId: safeOrixas[0]?.id || 'ogum',
+      tipoId: safeTipos[0]?.id || 'xire',
       toqueAtabaque: 'Ijexá',
       versos: [
         {
@@ -82,13 +120,18 @@ export const AdminDashboardView: React.FC = () => {
   };
 
   const handleEditCantiga = (c: Cantiga) => {
-    setEditingCantiga({ ...c, versos: [...c.versos.map((v) => ({ ...v }))] });
+    const versosList = Array.isArray(c?.versos) ? c.versos : [];
+    setEditingCantiga({
+      ...c,
+      versos: versosList.map((v) => ({ ...v })),
+    });
     setIsCantigaModalOpen(true);
   };
 
   const handleAddVerse = () => {
     if (!editingCantiga) return;
-    const newOrder = editingCantiga.versos.length + 1;
+    const currentVersos = Array.isArray(editingCantiga.versos) ? editingCantiga.versos : [];
+    const newOrder = currentVersos.length + 1;
     const newVerse: Verso = {
       id: `v-${Date.now()}-${newOrder}`,
       ordem: newOrder,
@@ -98,24 +141,26 @@ export const AdminDashboardView: React.FC = () => {
     };
     setEditingCantiga({
       ...editingCantiga,
-      versos: [...editingCantiga.versos, newVerse],
+      versos: [...currentVersos, newVerse],
     });
   };
 
   const handleRemoveVerse = (id: string) => {
     if (!editingCantiga) return;
-    if (editingCantiga.versos.length <= 1) return;
+    const currentVersos = Array.isArray(editingCantiga.versos) ? editingCantiga.versos : [];
+    if (currentVersos.length <= 1) return;
     setEditingCantiga({
       ...editingCantiga,
-      versos: editingCantiga.versos.filter((v) => v.id !== id),
+      versos: currentVersos.filter((v) => v.id !== id),
     });
   };
 
   const handleVerseChange = (id: string, field: 'ioruba' | 'pronuncia' | 'traducao', val: string) => {
     if (!editingCantiga) return;
+    const currentVersos = Array.isArray(editingCantiga.versos) ? editingCantiga.versos : [];
     setEditingCantiga({
       ...editingCantiga,
-      versos: editingCantiga.versos.map((v) => (v.id === id ? { ...v, [field]: val } : v)),
+      versos: currentVersos.map((v) => (v.id === id ? { ...v, [field]: val } : v)),
     });
   };
 
@@ -187,17 +232,17 @@ export const AdminDashboardView: React.FC = () => {
       <div className="flex items-center gap-2 border-b border-[#E6D5AC] pb-1 overflow-x-auto">
         <button
           onClick={() => setActiveTab('cantigas')}
-          className={`px-4 py-2 text-xs font-bold whitespace-nowrap transition-colors border-b-2 ${
+          className={`px-4 py-2 text-xs font-bold whitespace-nowrap transition-colors border-b-2 cursor-pointer ${
             activeTab === 'cantigas'
               ? 'border-[#9A3412] text-[#9A3412]'
               : 'border-transparent text-gray-600 hover:text-gray-900'
           }`}
         >
-          Cantigas da Casa ({cantigas.length})
+          Cantigas da Casa ({safeCantigas.length})
         </button>
         <button
           onClick={() => setActiveTab('membros')}
-          className={`px-4 py-2 text-xs font-bold whitespace-nowrap transition-colors border-b-2 flex items-center gap-1.5 ${
+          className={`px-4 py-2 text-xs font-bold whitespace-nowrap transition-colors border-b-2 flex items-center gap-1.5 cursor-pointer ${
             activeTab === 'membros'
               ? 'border-[#9A3412] text-[#9A3412]'
               : 'border-transparent text-gray-600 hover:text-gray-900'
@@ -212,23 +257,23 @@ export const AdminDashboardView: React.FC = () => {
         </button>
         <button
           onClick={() => setActiveTab('orixas')}
-          className={`px-4 py-2 text-xs font-bold whitespace-nowrap transition-colors border-b-2 ${
+          className={`px-4 py-2 text-xs font-bold whitespace-nowrap transition-colors border-b-2 cursor-pointer ${
             activeTab === 'orixas'
               ? 'border-[#9A3412] text-[#9A3412]'
               : 'border-transparent text-gray-600 hover:text-gray-900'
           }`}
         >
-          Orixás ({orixas.length})
+          Orixás ({safeOrixas.length})
         </button>
         <button
           onClick={() => setActiveTab('tipos')}
-          className={`px-4 py-2 text-xs font-bold whitespace-nowrap transition-colors border-b-2 ${
+          className={`px-4 py-2 text-xs font-bold whitespace-nowrap transition-colors border-b-2 cursor-pointer ${
             activeTab === 'tipos'
               ? 'border-[#9A3412] text-[#9A3412]'
               : 'border-transparent text-gray-600 hover:text-gray-900'
           }`}
         >
-          Tipos de Cantiga ({tipos.length})
+          Tipos de Cantiga ({safeTipos.length})
         </button>
       </div>
 
@@ -241,7 +286,7 @@ export const AdminDashboardView: React.FC = () => {
             </p>
             <button
               onClick={handleOpenNewCantiga}
-              className="px-4 py-2.5 bg-[#9A3412] hover:bg-[#7C2D12] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-transform active:scale-95 whitespace-nowrap"
+              className="px-4 py-2.5 bg-[#9A3412] hover:bg-[#7C2D12] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition-transform active:scale-95 whitespace-nowrap cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>Cadastrar Nova Cantiga</span>
@@ -249,99 +294,107 @@ export const AdminDashboardView: React.FC = () => {
           </div>
 
           <div className="bg-white rounded-3xl border border-[#E6D5AC] overflow-hidden shadow-xs divide-y divide-gray-100">
-            {cantigas.map((c) => {
-              const orixa = orixas.find((o) => o.id === c.orixaId);
-              const tipo = tipos.find((t) => t.id === c.tipoId);
+            {safeCantigas.length === 0 ? (
+              <div className="p-8 text-center text-xs text-gray-500">
+                Nenhuma cantiga cadastrada no momento.
+              </div>
+            ) : (
+              safeCantigas.map((c) => {
+                const orixa = safeOrixas.find((o) => o.id === c.orixaId);
+                const tipo = safeTipos.find((t) => t.id === c.tipoId);
+                const versosList = Array.isArray(c?.versos) ? c.versos : [];
+                const primeiroIoruba = versosList[0]?.ioruba || '';
 
-              return (
-                <div
-                  key={c.id}
-                  className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-[#FAF8F5] transition-colors"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="font-semibold text-[#2C1810] flex items-center gap-1">
-                        <span
-                          className="w-2 h-2 rounded-full inline-block"
-                          style={{ backgroundColor: orixa?.corPrimaria }}
-                        />
-                        {orixa?.nome}
-                      </span>
-                      <span aria-hidden="true" className="text-gray-300">·</span>
-                      <span className="text-gray-500">{tipo?.nome}</span>
-                      <span aria-hidden="true" className="text-gray-300">·</span>
-                      <span className="text-gray-500">Toque {c.toqueAtabaque}</span>
-                      {c.ehExemplo && (
-                        <span className="bg-[#FAF8F5] border border-[#E6D5AC] text-[10px] text-[#78350F] px-1.5 rounded">
-                          Exemplo
+                return (
+                  <div
+                    key={c.id || Math.random()}
+                    className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-[#FAF8F5] transition-colors"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="font-semibold text-[#2C1810] flex items-center gap-1">
+                          <span
+                            className="w-2 h-2 rounded-full inline-block"
+                            style={{ backgroundColor: orixa?.corPrimaria || '#9A3412' }}
+                          />
+                          {orixa?.nome || 'Orixá'}
                         </span>
-                      )}
+                        <span aria-hidden="true" className="text-gray-300">·</span>
+                        <span className="text-gray-500">{tipo?.nome || 'Tipo'}</span>
+                        <span aria-hidden="true" className="text-gray-300">·</span>
+                        <span className="text-gray-500">Toque {c.toqueAtabaque || 'Ijexá'}</span>
+                        {c.ehExemplo && (
+                          <span className="bg-[#FAF8F5] border border-[#E6D5AC] text-[10px] text-[#78350F] px-1.5 rounded">
+                            Exemplo
+                          </span>
+                        )}
+                      </div>
+
+                      <h3 className="font-display font-bold text-base sm:text-lg text-[#2C1810]">
+                        {c.titulo}
+                      </h3>
+
+                      <p className="text-xs text-gray-500 line-clamp-1">
+                        {versosList.length} versos{primeiroIoruba ? ` · "${primeiroIoruba}"` : ''}
+                      </p>
                     </div>
 
-                    <h3 className="font-display font-bold text-base sm:text-lg text-[#2C1810]">
-                      {c.titulo}
-                    </h3>
+                    {/* Actions Bar */}
+                    <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
+                      {/* Status Revision Toggle */}
+                      <button
+                        onClick={() => toggleRevisaoCantiga(c.id)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                          c.revisada
+                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
+                            : 'bg-amber-50 text-amber-800 border border-amber-300'
+                        }`}
+                        title="Clique para alternar o status de revisão"
+                      >
+                        {c.revisada ? (
+                          <>
+                            <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Revisada</span>
+                          </>
+                        ) : (
+                          <>
+                            <Clock className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Em Revisão</span>
+                          </>
+                        )}
+                      </button>
 
-                    <p className="text-xs text-gray-500 line-clamp-1">
-                      {c.versos.length} versos · "{c.versos[0]?.ioruba}"
-                    </p>
+                      <button
+                        onClick={() => openCantigaDetail(c.id)}
+                        className="px-3 py-1.5 bg-[#FAF8F5] hover:bg-[#F5EBE1] text-[#59260B] border border-[#E6D5AC] rounded-xl text-xs font-semibold cursor-pointer"
+                      >
+                        Ver
+                      </button>
+
+                      <button
+                        onClick={() => handleEditCantiga(c)}
+                        className="p-2 text-gray-600 hover:text-[#9A3412] hover:bg-gray-100 rounded-xl cursor-pointer"
+                        aria-label="Editar cantiga"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          if (confirm(`Tem certeza que deseja excluir a cantiga "${c.titulo}"?`)) {
+                            excluirCantiga(c.id);
+                          }
+                        }}
+                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl cursor-pointer"
+                        aria-label="Excluir cantiga"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
-
-                  {/* Actions Bar */}
-                  <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
-                    {/* Status Revision Toggle */}
-                    <button
-                      onClick={() => toggleRevisaoCantiga(c.id)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors ${
-                        c.revisada
-                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
-                          : 'bg-amber-50 text-amber-800 border border-amber-300'
-                      }`}
-                      title="Clique para alternar o status de revisão"
-                    >
-                      {c.revisada ? (
-                        <>
-                          <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>Revisada</span>
-                        </>
-                      ) : (
-                        <>
-                          <Clock className="w-3.5 h-3.5 text-amber-600" />
-                          <span>Em Revisão</span>
-                        </>
-                      )}
-                    </button>
-
-                    <button
-                      onClick={() => openCantigaDetail(c.id)}
-                      className="px-3 py-1.5 bg-[#FAF8F5] hover:bg-[#F5EBE1] text-[#59260B] border border-[#E6D5AC] rounded-xl text-xs font-semibold"
-                    >
-                      Ver
-                    </button>
-
-                    <button
-                      onClick={() => handleEditCantiga(c)}
-                      className="p-2 text-gray-600 hover:text-[#9A3412] hover:bg-gray-100 rounded-xl"
-                      aria-label="Editar cantiga"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        if (confirm(`Tem certeza que deseja excluir a cantiga "${c.titulo}"?`)) {
-                          excluirCantiga(c.id);
-                        }
-                      }}
-                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl"
-                      aria-label="Excluir cantiga"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </div>
       )}
@@ -416,20 +469,20 @@ export const AdminDashboardView: React.FC = () => {
           {/* List of already approved members */}
           <div className="pt-6">
             <h3 className="font-display font-bold text-sm text-[#2C1810] mb-3">
-              Membros Ativos com Acesso Liberado ({users.filter((u) => u.aprovado).length})
+              Membros Ativos com Acesso Liberado ({safeUsers.filter((u) => u.aprovado).length})
             </h3>
             <div className="bg-white rounded-2xl border border-[#E6D5AC] divide-y divide-gray-100">
-              {users
+              {safeUsers
                 .filter((u) => u.aprovado)
                 .map((u) => (
                   <div
-                    key={u.id}
+                    key={u.id || Math.random()}
                     className="p-3.5 px-4 flex items-center justify-between text-xs"
                   >
                     <div>
-                      <span className="font-semibold text-[#2C1810] block">{u.nome}</span>
+                      <span className="font-semibold text-[#2C1810] block">{u.nome || 'Membro'}</span>
                       <span className="text-[#78350F]/70 text-[11px] font-medium">
-                        {u.perfil === 'administradora' ? 'Iyá Tèbíèse' : u.email}
+                        {u.perfil === 'administradora' ? 'Iyá Tèbíèse' : u.email || ''}
                       </span>
                     </div>
                     <span className="text-[10px] text-[#92400E] bg-[#FEF3C7] px-2 py-0.5 rounded font-bold capitalize">
@@ -461,7 +514,7 @@ export const AdminDashboardView: React.FC = () => {
                 });
                 setIsOrixaModalOpen(true);
               }}
-              className="px-3.5 py-2 bg-[#9A3412] text-white rounded-xl text-xs font-bold flex items-center gap-1"
+              className="px-3.5 py-2 bg-[#9A3412] text-white rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Novo Orixá</span>
@@ -469,26 +522,26 @@ export const AdminDashboardView: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
-            {orixas.map((o) => (
+            {safeOrixas.map((o) => (
               <div
-                key={o.id}
+                key={o.id || Math.random()}
                 className="bg-white rounded-2xl p-4 border border-[#E6D5AC] flex items-start justify-between gap-3 relative overflow-hidden"
               >
                 <div
                   className="absolute left-0 top-0 bottom-0 w-1.5"
-                  style={{ backgroundColor: o.corPrimaria }}
+                  style={{ backgroundColor: o.corPrimaria || '#9A3412' }}
                 />
                 <div className="pl-2 space-y-1">
-                  <h4 className="font-display font-bold text-sm text-[#2C1810]">{o.nome}</h4>
-                  <p className="text-xs text-[#78350F] italic">"{o.saudacao}"</p>
-                  <p className="text-[11px] text-gray-500 line-clamp-2">{o.descricaoCurta}</p>
+                  <h4 className="font-display font-bold text-sm text-[#2C1810]">{o.nome || 'Orixá'}</h4>
+                  <p className="text-xs text-[#78350F] italic">"{o.saudacao || ''}"</p>
+                  <p className="text-[11px] text-gray-500 line-clamp-2">{o.descricaoCurta || ''}</p>
                 </div>
                 <button
                   onClick={() => {
                     setEditingOrixa(o);
                     setIsOrixaModalOpen(true);
                   }}
-                  className="text-gray-400 hover:text-[#9A3412] p-1"
+                  className="text-gray-400 hover:text-[#9A3412] p-1 cursor-pointer"
                   aria-label={`Editar ${o.nome}`}
                 >
                   <Edit2 className="w-3.5 h-3.5" />
@@ -515,7 +568,7 @@ export const AdminDashboardView: React.FC = () => {
                 });
                 setIsTipoModalOpen(true);
               }}
-              className="px-3.5 py-2 bg-[#9A3412] text-white rounded-xl text-xs font-bold flex items-center gap-1"
+              className="px-3.5 py-2 bg-[#9A3412] text-white rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Novo Tipo</span>
@@ -523,21 +576,21 @@ export const AdminDashboardView: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-            {tipos.map((t) => (
+            {safeTipos.map((t) => (
               <div
-                key={t.id}
+                key={t.id || Math.random()}
                 className="bg-white rounded-2xl p-4 border border-[#E6D5AC] flex items-start justify-between gap-3"
               >
                 <div className="space-y-1">
-                  <h4 className="font-display font-bold text-sm text-[#2C1810]">{t.nome}</h4>
-                  <p className="text-xs text-gray-600">{t.descricao}</p>
+                  <h4 className="font-display font-bold text-sm text-[#2C1810]">{t.nome || 'Tipo'}</h4>
+                  <p className="text-xs text-gray-600">{t.descricao || ''}</p>
                 </div>
                 <button
                   onClick={() => {
                     setEditingTipo(t);
                     setIsTipoModalOpen(true);
                   }}
-                  className="text-gray-400 hover:text-[#9A3412] p-1"
+                  className="text-gray-400 hover:text-[#9A3412] p-1 cursor-pointer"
                   aria-label={`Editar ${t.nome}`}
                 >
                   <Edit2 className="w-3.5 h-3.5" />
@@ -599,7 +652,7 @@ export const AdminDashboardView: React.FC = () => {
                     }
                     className="w-full p-2.5 bg-[#FAF8F5] border border-[#E6D5AC] rounded-xl text-xs text-[#2C1810] focus:ring-2 focus:ring-[#9A3412]"
                   >
-                    {orixas.map((o) => (
+                    {safeOrixas.map((o) => (
                       <option key={o.id} value={o.id}>
                         {o.nome}
                       </option>
@@ -618,7 +671,7 @@ export const AdminDashboardView: React.FC = () => {
                     }
                     className="w-full p-2.5 bg-[#FAF8F5] border border-[#E6D5AC] rounded-xl text-xs text-[#2C1810] focus:ring-2 focus:ring-[#9A3412]"
                   >
-                    {tipos.map((t) => (
+                    {safeTipos.map((t) => (
                       <option key={t.id} value={t.id}>
                         {t.nome}
                       </option>
@@ -666,7 +719,7 @@ export const AdminDashboardView: React.FC = () => {
                   <button
                     type="button"
                     onClick={handleAddVerse}
-                    className="text-xs font-bold text-[#9A3412] hover:text-[#7C2D12] flex items-center gap-1"
+                    className="text-xs font-bold text-[#9A3412] hover:text-[#7C2D12] flex items-center gap-1 cursor-pointer"
                   >
                     <PlusCircle className="w-4 h-4" />
                     <span>Adicionar Verso</span>
@@ -674,7 +727,7 @@ export const AdminDashboardView: React.FC = () => {
                 </div>
 
                 <div className="space-y-3">
-                  {editingCantiga.versos.map((verso, idx) => (
+                  {(editingCantiga.versos || []).map((verso, idx) => (
                     <div
                       key={verso.id}
                       className="p-3.5 bg-[#FAF8F5] border border-[#E6D5AC] rounded-2xl space-y-2 relative"
@@ -683,11 +736,11 @@ export const AdminDashboardView: React.FC = () => {
                         <span className="text-[10px] font-bold text-[#78350F] uppercase">
                           Verso {idx + 1}
                         </span>
-                        {editingCantiga.versos.length > 1 && (
+                        {(editingCantiga.versos || []).length > 1 && (
                           <button
                             type="button"
                             onClick={() => handleRemoveVerse(verso.id)}
-                            className="text-[11px] text-red-500 hover:text-red-700"
+                            className="text-[11px] text-red-500 hover:text-red-700 cursor-pointer"
                           >
                             Remover verso
                           </button>

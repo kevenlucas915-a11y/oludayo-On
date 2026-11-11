@@ -133,8 +133,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       (snap) => {
         if (!snap.empty) {
           const list: Orixa[] = [];
-          snap.forEach((docSnap) => list.push(docSnap.data() as Orixa));
-          setOrixas(list);
+          snap.forEach((docSnap) => {
+            const data = docSnap.data() as Orixa;
+            if (data && data.id) list.push(data);
+          });
+          setOrixas(list.length > 0 ? list : SEED_ORIXAS);
         } else {
           // Seed Orixas
           const batch = writeBatch(db);
@@ -158,8 +161,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       (snap) => {
         if (!snap.empty) {
           const list: TipoCantiga[] = [];
-          snap.forEach((docSnap) => list.push(docSnap.data() as TipoCantiga));
-          setTipos(list);
+          snap.forEach((docSnap) => {
+            const data = docSnap.data() as TipoCantiga;
+            if (data && data.id) list.push(data);
+          });
+          setTipos(list.length > 0 ? list : SEED_TIPOS);
         } else {
           // Seed Tipos
           const batch = writeBatch(db);
@@ -183,8 +189,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       (snap) => {
         if (!snap.empty) {
           const list: Cantiga[] = [];
-          snap.forEach((docSnap) => list.push(docSnap.data() as Cantiga));
-          setCantigas(list);
+          snap.forEach((docSnap) => {
+            const data = docSnap.data() as Cantiga;
+            if (data && data.id) {
+              list.push({
+                ...data,
+                versos: Array.isArray(data.versos) ? data.versos : [],
+              });
+            }
+          });
+          setCantigas(list.length > 0 ? list : SEED_CANTIGAS);
         } else {
           // Seed initial cantigas into Firestore
           const batch = writeBatch(db);
@@ -209,8 +223,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (!snap.empty) {
           const list: Usuario[] = [];
           snap.forEach((docSnap) => {
-            list.push(docSnap.data() as Usuario);
+            const data = docSnap.data() as Usuario;
+            if (data && data.id) list.push(data);
           });
+          const hasAdmin = list.some((u) => u.perfil === 'administradora' || u.id === 'user-admin-jenifer');
+          if (!hasAdmin) {
+            list.unshift(SEED_USUARIOS[0]);
+          }
           setUsers(list);
         } else {
           // Initialize Jenifer as sole initial admin if collection is empty
